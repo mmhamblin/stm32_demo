@@ -14,6 +14,7 @@ The project is a non-clinical engineering demo. It does not diagnose, treat, ima
 
 - Translating an email requirement into short SRS-style requirements.
 - Modeling a 2046-sample, 12-bit, 15 MSPS burst capture.
+- Modeling a continuous-stream option with a circular DMA ring and 2046-sample windows.
 - Writing captured bursts into a memory-style RAM ring buffer.
 - Appending completed bursts to a simulated SD-card log from the storage path.
 - Showing a ThreadX/HAL-shaped STM32U5A5 firmware architecture.
@@ -35,6 +36,7 @@ In this repository, the hardware is simulated:
 
 ```text
 simple Python burst generator
+  -> simulator/circular_dma.py continuous DMA ring
   -> simulator/device_memory.py acquisition/storage model
   -> simulator/logs/sd_capture.u12bin
   -> gui/acquisition_demo_ui.py
@@ -106,6 +108,7 @@ The tests cover the burst generator, simple log record format, simulated memory 
 | `docs/software_requirements.md` | Short SRS-style requirement IDs. |
 | `docs/board_interface_map.md` | How the requirement maps to STM32U5A5 concepts. |
 | `simulator/simple_acquisition_demo.py` | Minimal terminal demo. |
+| `simulator/circular_dma.py` | Lightweight continuous-stream circular DMA model. |
 | `simulator/device_memory.py` | Simulated STM32 RAM record store. |
 | `simulator/sd_card.py` | File-backed SD-card logging simulation. |
 | `tests/` | Standard-library unit tests for the simulator and memory model. |
@@ -120,7 +123,7 @@ The tests cover the burst generator, simple log record format, simulated memory 
 | Area | Demo version | Real STM32U5A5 version |
 |---|---|---|
 | ADC source | Synthetic 12-bit samples | TI AFE5401 data bus |
-| Capture | Python generator | PSSI or DCMI with DMA |
+| Capture | Circular DMA simulator | PSSI or DCMI with DMA |
 | Memory | Python RAM ring buffer | C RAM ring buffer |
 | SD card | File-backed simulated SD log | SDMMC/FileX in storage thread |
 | Scheduling | Qt/Python timer | ThreadX acquisition and storage threads |

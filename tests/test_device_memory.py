@@ -12,6 +12,7 @@ if str(SIMULATOR_DIR) not in sys.path:
     sys.path.insert(0, str(SIMULATOR_DIR))
 
 from device_memory import MEMORY_RECORD_COUNT, DeviceMemory, SimulatedStm32U5A5
+from circular_dma import CircularDmaSimulator, DMA_RING_SAMPLE_COUNT, PERIOD_SAMPLE_ADVANCE
 from simple_acquisition_demo import SAMPLE_RATE_HZ, SAMPLES_PER_BURST, generate_burst
 
 
@@ -76,6 +77,9 @@ class SimulatedDeviceTests(unittest.TestCase):
         self.assertEqual(status.state, "ARMED")
         self.assertEqual(status.records_written, 1)
         self.assertEqual(status.latest_sequence, record.sequence)
+        self.assertEqual(status.capture_mode, "CIRCULAR_DMA_WINDOW")
+        self.assertEqual(status.dma_ring_samples, DMA_RING_SAMPLE_COUNT)
+        self.assertEqual(status.dma_total_samples, PERIOD_SAMPLE_ADVANCE)
         self.assertEqual(status.storage_queue_depth, 0)
         self.assertEqual(status.storage_writes, 1)
         self.assertEqual(status.storage_queue_full, 0)
@@ -117,6 +121,26 @@ class SimulatedDeviceTests(unittest.TestCase):
         status = device.status()
         self.assertEqual(status.missed_bursts, 1)
         self.assertEqual(status.last_error, "MISSED_BURST")
+
+
+class CircularDmaTests(unittest.TestCase):
+    def test_latest_window_has_expected_size_after_one_period(self) -> None:
+        dma = CircularDmaSimulator()
+
+        dma.advance_one_period()
+        window = dma.latest_window()
+
+        self.assertEqual(len(window), SAMPLES_PER_BURST)
+        self.assertEqual(dma.total_samples_written, PERIOD_SAMPLE_ADVANCE)
+        self.assertTrue(all(0 <= sample <= 4095 for sample in window))
+
+    def test_ring_write_index_wraps(self) -> None:
+        dma = CircularDmaSimulator(ring_sample_count=4096)
+
+        dma.advance_samples(5000)
+
+        self.assertEqual(dma.write_index, 5000 % 4096)
+        self.assertEqual(len(dma.latest_window()), SAMPLES_PER_BURST)
 
 
 if __name__ == "__main__":

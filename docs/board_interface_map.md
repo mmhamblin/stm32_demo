@@ -23,13 +23,17 @@ Key numbers:
 
 The hard part is capturing a fast 136 us burst reliably. The easier part is that the system has most of the remaining 30 ms period to write the block, update status, and return to sleep.
 
+Because the AFE5401 context mentioned a 30 MHz clock, the simulator also models
+the continuous-stream interpretation: samples keep arriving into a circular DMA
+ring, and the firmware extracts one 2046-sample window every 30 ms.
+
 ## Data Path
 
 ```text
 TI AFE5401
   -> 12-bit ADC samples
   -> STM32U5A5 parallel capture peripheral
-  -> DMA burst buffer
+  -> DMA burst buffer or circular DMA ring
   -> ThreadX acquisition event
   -> ThreadX storage queue
   -> storage thread
@@ -51,7 +55,7 @@ optional channel order: CH0, CH1, CH0, CH1, ...
 |---|---|---|
 | ADC source | TI AFE5401 | Synthetic 12-bit burst generator |
 | Parallel capture | PSSI, or DCMI if timing fits better | Filled sample buffer |
-| High-speed movement | DMA/GPDMA | Filled-buffer callback |
+| High-speed movement | DMA/GPDMA | Circular DMA ring/window model |
 | Scheduling | ThreadX timer/events | Host timer/task loop |
 | Storage | RAM plus optional SDMMC/FileX log | RAM ring plus `sd_capture.u12bin` |
 | GUI control | USBX CDC virtual COM port | In-process simulated device |

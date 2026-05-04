@@ -13,8 +13,9 @@ import struct
 import time
 import zlib
 
+from circular_dma import CircularDmaSimulator, DMA_RING_SAMPLE_COUNT
 from sd_card import SimulatedSdCard
-from simple_acquisition_demo import SAMPLE_RATE_HZ, SAMPLES_PER_BURST, generate_burst
+from simple_acquisition_demo import SAMPLE_RATE_HZ, SAMPLES_PER_BURST
 
 
 MEMORY_RECORD_COUNT = 8
@@ -37,6 +38,10 @@ class MemoryStatus:
     records_written: int
     records_overwritten: int
     latest_sequence: int
+    capture_mode: str
+    dma_ring_samples: int
+    dma_write_index: int
+    dma_total_samples: int
     storage_queue_depth: int
     storage_writes: int
     storage_queue_full: int
@@ -113,6 +118,7 @@ class SimulatedStm32U5A5:
     def __init__(self) -> None:
         self.memory = DeviceMemory()
         self.sd_card = SimulatedSdCard(Path(__file__).resolve().parent / "logs" / "sd_capture.u12bin")
+        self.circular_dma = CircularDmaSimulator()
         self.storage_queue: list[tuple[int, list[int]]] = []
         self.state = "IDLE"
         self.storage_writes = 0
@@ -123,6 +129,7 @@ class SimulatedStm32U5A5:
     def start(self) -> None:
         self.memory.reset()
         self.sd_card.mount(reset_file=True)
+        self.circular_dma.reset()
         self.storage_queue.clear()
         self.state = "ARMED"
         self.storage_writes = 0
@@ -136,8 +143,8 @@ class SimulatedStm32U5A5:
 
     def capture_once(self) -> MemoryRecord:
         self.state = "CAPTURING"
-        burst_index = self.memory.records_written
-        samples = generate_burst(burst_index)
+        self.circular_dma.advance_one_period()
+        samples = self.circular_dma.latest_window()
         capture_timestamp_us = int(time.time() * 1_000_000)
 
         self.state = "QUEUING"
@@ -180,6 +187,10 @@ class SimulatedStm32U5A5:
             records_written=self.memory.records_written,
             records_overwritten=self.memory.records_overwritten,
             latest_sequence=latest_sequence,
+            capture_mode="CIRCULAR_DMA_WINDOW",
+            dma_ring_samples=DMA_RING_SAMPLE_COUNT,
+            dma_write_index=self.circular_dma.write_index,
+            dma_total_samples=self.circular_dma.total_samples_written,
             storage_queue_depth=len(self.storage_queue),
             storage_writes=self.storage_writes,
             storage_queue_full=self.storage_queue_full,

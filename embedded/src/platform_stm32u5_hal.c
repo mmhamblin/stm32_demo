@@ -8,6 +8,10 @@
  * Acquisition code calls Platform_StartAfeCapture() rather than directly
  * depending on PSSI/DCMI/DMA details.
  *
+ * For a continuous AFE clock, this platform layer is also where a circular DMA
+ * implementation would live. The acquisition/storage split would stay the same;
+ * only the capture-window strategy would change.
+ *
  * @requirement SRS-ACQ-001
  * @requirement SRS-HAL-001
  */
