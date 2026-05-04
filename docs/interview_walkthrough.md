@@ -38,11 +38,18 @@ This proves:
 - RAM ring overwrite behavior
 - CRC metadata exists
 
+Optional unit-test command:
+
+```powershell
+python -m unittest discover -s tests
+```
+
 ## 4. Show The Embedded C Shape
 
 Open these files:
 
 - `embedded/src/acquisition_thread.c`
+- `embedded/src/storage_thread.c`
 - `embedded/src/platform_stm32u5_hal.c`
 - `embedded/src/memory_store.c`
 
@@ -52,11 +59,15 @@ Explain:
 ThreadX acquisition thread
   -> starts PSSI/DCMI + DMA capture
   -> waits for DMA-complete semaphore
-  -> writes 2046 samples to RAM ring buffer
+  -> queues completed buffer to storage thread
   -> sleeps until the next 30 ms period
+ThreadX storage thread
+  -> receives queued buffer
+  -> writes 2046 samples to RAM ring buffer
+  -> releases capture buffer
 ```
 
-The CPU does not poll 15 MSPS data.
+The CPU does not poll 15 MSPS data, and the short capture path is separated from the slower memory-copy/CRC path.
 
 ## 5. Show The GUI
 

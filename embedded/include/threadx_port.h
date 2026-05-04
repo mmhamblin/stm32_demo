@@ -1,13 +1,16 @@
 #ifndef THREADX_PORT_H
 #define THREADX_PORT_H
 
-/*
- * Thin ThreadX include boundary.
+/**
+ * @file threadx_port.h
+ * @brief Minimal ThreadX include boundary for the portfolio skeleton.
  *
- * In the real STM32U5A5/IAR project, define USE_REAL_THREADX and include
- * Azure RTOS ThreadX normally through tx_api.h. For this portfolio skeleton,
- * the fallback declarations keep the code readable without requiring the
- * generated CubeMX project.
+ * A real STM32U5A5 project should include tx_api.h directly by defining
+ * USE_REAL_THREADX. The fallback declarations keep this repository readable
+ * before CubeMX/IAR project generation.
+ *
+ * @requirement SRS-RTOS-001
+ * @requirement SRS-RTOS-002
  */
 
 #ifdef USE_REAL_THREADX
@@ -29,9 +32,15 @@ typedef struct
     ULONG count;
 } TX_SEMAPHORE;
 
+typedef struct
+{
+    const char *name;
+} TX_QUEUE;
+
 #define TX_SUCCESS 0u
 #define TX_AUTO_START 1u
 #define TX_NO_TIME_SLICE 0u
+#define TX_NO_WAIT ((ULONG)0u)
 #define TX_WAIT_FOREVER ((ULONG)0xFFFFFFFFu)
 
 UINT tx_thread_create(TX_THREAD *thread_ptr,
@@ -51,6 +60,16 @@ UINT tx_semaphore_create(TX_SEMAPHORE *semaphore_ptr,
 
 UINT tx_semaphore_get(TX_SEMAPHORE *semaphore_ptr, ULONG wait_option);
 UINT tx_semaphore_put(TX_SEMAPHORE *semaphore_ptr);
+
+UINT tx_queue_create(TX_QUEUE *queue_ptr,
+                     char *name_ptr,
+                     UINT message_size,
+                     void *queue_start,
+                     ULONG queue_size);
+
+UINT tx_queue_send(TX_QUEUE *queue_ptr, void *source_ptr, ULONG wait_option);
+UINT tx_queue_receive(TX_QUEUE *queue_ptr, void *destination_ptr, ULONG wait_option);
+
 void tx_thread_sleep(ULONG timer_ticks);
 #endif
 
@@ -61,5 +80,6 @@ void tx_thread_sleep(ULONG timer_ticks);
 #define MS_TO_TICKS(ms) ((ULONG)(ms))
 
 extern TX_SEMAPHORE g_capture_done_semaphore;
+extern TX_QUEUE g_storage_queue;
 
 #endif

@@ -8,14 +8,20 @@ The key design is:
 ThreadX acquisition thread
   -> start PSSI/DCMI + DMA capture
   -> wait for DMA-complete semaphore
-  -> write 2046 12-bit samples to RAM record store
+  -> queue completed buffer to storage thread
   -> sleep until the next 30 ms period
+ThreadX storage thread
+  -> receive queued buffer
+  -> write 2046 12-bit samples to RAM record store
+  -> release capture buffer
 ```
 
 Important files:
 
 - `include/acquisition.h`: acquisition constants, states, status, and ThreadX entry point.
-- `src/acquisition_thread.c`: main ThreadX loop.
+- `src/acquisition_thread.c`: timing-sensitive acquisition loop.
+- `include/storage_thread.h`: completed-buffer queue contract.
+- `src/storage_thread.c`: RAM-backed storage thread.
 - `include/platform_stm32u5.h`: HAL boundary.
 - `src/platform_stm32u5_hal.c`: STM32U5A5 HAL-shaped capture/sleep mapping.
 - `include/memory_store.h`: RAM record format.
