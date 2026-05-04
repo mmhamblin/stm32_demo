@@ -8,10 +8,12 @@ the GUI can read "device memory" instead of directly owning acquisition data.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 import struct
 import time
 import zlib
 
+from sd_card import SimulatedSdCard
 from simple_acquisition_demo import SAMPLE_RATE_HZ, SAMPLES_PER_BURST, generate_burst
 
 
@@ -38,6 +40,11 @@ class MemoryStatus:
     storage_queue_depth: int
     storage_writes: int
     storage_queue_full: int
+    sd_mounted: bool
+    sd_records_written: int
+    sd_bytes_written: int
+    sd_write_errors: int
+    sd_file_path: Path
     samples_written: int
     bytes_written: int
     missed_bursts: int
@@ -105,6 +112,7 @@ class SimulatedStm32U5A5:
 
     def __init__(self) -> None:
         self.memory = DeviceMemory()
+        self.sd_card = SimulatedSdCard(Path(__file__).resolve().parent / "logs" / "sd_capture.u12bin")
         self.storage_queue: list[tuple[int, list[int]]] = []
         self.state = "IDLE"
         self.storage_writes = 0
@@ -114,6 +122,7 @@ class SimulatedStm32U5A5:
 
     def start(self) -> None:
         self.memory.reset()
+        self.sd_card.mount(reset_file=True)
         self.storage_queue.clear()
         self.state = "ARMED"
         self.storage_writes = 0
@@ -122,6 +131,7 @@ class SimulatedStm32U5A5:
         self.last_error = "NONE"
 
     def stop(self) -> None:
+        self.sd_card.unmount()
         self.state = "IDLE"
 
     def capture_once(self) -> MemoryRecord:
@@ -146,6 +156,13 @@ class SimulatedStm32U5A5:
     def _storage_step(self) -> MemoryRecord:
         capture_timestamp_us, samples = self.storage_queue.pop(0)
         record = self.memory.write_burst(samples, timestamp_us=capture_timestamp_us)
+        if not self.sd_card.write_record(
+            sequence=record.sequence,
+            timestamp_us=record.timestamp_us,
+            sample_count=record.sample_count,
+            samples=record.samples,
+        ):
+            self.last_error = self.sd_card.status().last_error
         self.storage_writes += 1
         return record
 
@@ -156,6 +173,7 @@ class SimulatedStm32U5A5:
     def status(self) -> MemoryStatus:
         latest = self.memory.latest()
         latest_sequence = latest.sequence if latest else 0
+        sd_status = self.sd_card.status()
 
         return MemoryStatus(
             state=self.state,
@@ -165,6 +183,11 @@ class SimulatedStm32U5A5:
             storage_queue_depth=len(self.storage_queue),
             storage_writes=self.storage_writes,
             storage_queue_full=self.storage_queue_full,
+            sd_mounted=sd_status.mounted,
+            sd_records_written=sd_status.records_written,
+            sd_bytes_written=sd_status.bytes_written,
+            sd_write_errors=sd_status.write_errors,
+            sd_file_path=sd_status.file_path,
             samples_written=self.memory.samples_written,
             bytes_written=self.memory.bytes_written,
             missed_bursts=self.missed_bursts,

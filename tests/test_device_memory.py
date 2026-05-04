@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import struct
 import unittest
+import zlib
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SIMULATOR_DIR = PROJECT_ROOT / "simulator"
@@ -77,11 +79,35 @@ class SimulatedDeviceTests(unittest.TestCase):
         self.assertEqual(status.storage_queue_depth, 0)
         self.assertEqual(status.storage_writes, 1)
         self.assertEqual(status.storage_queue_full, 0)
+        self.assertEqual(status.sd_records_written, 1)
+        self.assertEqual(status.sd_write_errors, 0)
+        self.assertGreater(status.sd_bytes_written, 0)
+        self.assertTrue(status.sd_file_path.exists())
         self.assertEqual(status.samples_written, SAMPLES_PER_BURST)
         self.assertEqual(status.bytes_written, SAMPLES_PER_BURST * 2)
 
         device.stop()
         self.assertEqual(device.status().state, "IDLE")
+
+    def test_sd_log_contains_written_record(self) -> None:
+        device = SimulatedStm32U5A5()
+        device.start()
+
+        record = device.capture_once()
+        sd_path = device.status().sd_file_path
+
+        header_size = struct.calcsize("<IQII")
+        data = sd_path.read_bytes()
+        sequence, timestamp_us, sample_count, crc32 = struct.unpack(
+            "<IQII", data[:header_size]
+        )
+        payload = data[header_size:]
+
+        self.assertEqual(sequence, record.sequence)
+        self.assertEqual(timestamp_us, record.timestamp_us)
+        self.assertEqual(sample_count, SAMPLES_PER_BURST)
+        self.assertEqual(len(payload), SAMPLES_PER_BURST * 2)
+        self.assertEqual(zlib.crc32(payload) & 0xFFFF_FFFF, crc32)
 
     def test_missed_burst_status(self) -> None:
         device = SimulatedStm32U5A5()
