@@ -74,6 +74,9 @@ class SimulatedDeviceTests(unittest.TestCase):
         self.assertEqual(status.state, "ARMED")
         self.assertEqual(status.records_written, 1)
         self.assertEqual(status.latest_sequence, record.sequence)
+        self.assertEqual(status.storage_queue_depth, 0)
+        self.assertEqual(status.storage_writes, 1)
+        self.assertEqual(status.storage_queue_full, 0)
         self.assertEqual(status.samples_written, SAMPLES_PER_BURST)
         self.assertEqual(status.bytes_written, SAMPLES_PER_BURST * 2)
 

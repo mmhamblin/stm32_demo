@@ -38,7 +38,9 @@ TI AFE5401
   -> STM32U5A5 parallel capture peripheral
   -> DMA burst buffer
   -> ThreadX acquisition event
-  -> memory/log record
+  -> ThreadX queue
+  -> storage thread
+  -> memory record
   -> GUI status or replay
 ```
 
@@ -59,8 +61,8 @@ If the final interpretation is 2046 samples per channel, the burst size changes 
 | Parallel capture | PSSI, or DCMI if timing fits better | Filled sample buffer |
 | High-speed movement | DMA/GPDMA | Filled-buffer callback |
 | Scheduling | ThreadX timer/events | Host timer/task loop |
-| Storage | RAM, SDMMC/FileX, or memory-backed log | `.u12log` file |
-| GUI control | USBX CDC virtual COM port | TCP localhost command server |
+| Storage | RAM record store | Simulated RAM record store |
+| GUI control | USBX CDC virtual COM port | In-process simulated device |
 | Integrity check | CRC peripheral or software CRC32 | Software CRC32 |
 | Sleep/idle | STM32U5 power modes | Simulated state transition |
 
@@ -69,13 +71,13 @@ If the final interpretation is 2046 samples per channel, the burst size changes 
 The embedded C design keeps hardware-specific calls behind a small platform layer:
 
 ```c
-bool Platform_AfeBurstStart(uint16_t *buffer, uint32_t sample_count);
-bool Platform_LogWrite(const void *data, uint32_t byte_count);
+platform_result_t Platform_StartAfeCapture(uint16_t *buffer, uint32_t sample_count);
+void Platform_StopAfeCapture(void);
 uint32_t Platform_GetTickMs(void);
-void Platform_EnterSleepUntilNextBurst(void);
+void Platform_EnterSleepUntilTick(uint32_t wake_tick_ms);
 ```
 
-In the simulator, `Platform_AfeBurstStart()` fills a buffer with synthetic samples. On STM32U5A5 hardware, the same call would start a PSSI/DCMI DMA transfer.
+In the simulator, the capture path fills a buffer with synthetic samples. On STM32U5A5 hardware, `Platform_StartAfeCapture()` would start a PSSI/DCMI DMA transfer.
 
 ## ThreadX Role
 
@@ -83,8 +85,8 @@ ThreadX would separate the firmware into small responsibilities:
 
 | Thread | Responsibility |
 |---|---|
-| Acquisition | Arm the burst capture and handle DMA complete. |
-| Logging | Write the completed 2046-sample block. |
+| Acquisition | Arm the burst capture and queue completed DMA buffers. |
+| Storage | Write the completed 2046-sample block to RAM records. |
 | Control | Process GUI commands such as start, stop, and status. |
 | Health | Detect missed bursts, storage errors, and timing faults. |
 

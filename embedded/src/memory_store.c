@@ -1,5 +1,16 @@
 #include "memory_store.h"
 
+/**
+ * @file memory_store.c
+ * @brief RAM ring buffer for acquisition burst records.
+ *
+ * This module stores completed bursts in RAM, with enough metadata for a GUI
+ * or diagnostic interface to identify the latest record and verify integrity.
+ *
+ * @requirement SRS-MEM-001
+ * @requirement SRS-MEM-002
+ */
+
 #include <string.h>
 
 #include "platform_stm32u5.h"
@@ -60,6 +71,13 @@ void MemoryStore_Init(void)
 
 bool MemoryStore_WriteBurst(const uint16_t *samples, uint32_t sample_count)
 {
+    return MemoryStore_WriteBurstAt(samples, sample_count, Platform_GetTickMs());
+}
+
+bool MemoryStore_WriteBurstAt(const uint16_t *samples,
+                              uint32_t sample_count,
+                              uint32_t timestamp_ms)
+{
     if ((samples == 0) || (sample_count != ACQ_SAMPLES_PER_BURST))
     {
         return false;
@@ -78,7 +96,7 @@ bool MemoryStore_WriteBurst(const uint16_t *samples, uint32_t sample_count)
     memory_record_t *record = &g_records[g_write_index];
 
     record->sequence = g_status.records_written;
-    record->timestamp_ms = Platform_GetTickMs();
+    record->timestamp_ms = timestamp_ms;
     record->sample_count = sample_count;
     record->sample_rate_hz = ACQ_SAMPLE_RATE_HZ;
     memcpy(record->samples, samples, sizeof(record->samples));

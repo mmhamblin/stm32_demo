@@ -5,8 +5,9 @@ Run from the project root after installing requirements:
     pip install -r requirements.txt
     python gui/acquisition_demo_ui.py
 
-The GUI monitors a simulated STM32 memory store. Acquisition writes bursts to
-that memory store; the GUI polls and plots the latest memory record.
+The GUI monitors a simulated STM32 memory store. Acquisition queues completed
+bursts to a storage worker model; the GUI polls and plots the latest memory
+record.
 """
 
 from __future__ import annotations
@@ -137,6 +138,8 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         self.samples_label = QtWidgets.QLabel()
         self.bytes_label = QtWidgets.QLabel()
         self.overwritten_label = QtWidgets.QLabel()
+        self.queue_label = QtWidgets.QLabel()
+        self.storage_writes_label = QtWidgets.QLabel()
         self.missed_label = QtWidgets.QLabel()
         self.crc_label = QtWidgets.QLabel()
         self.error_label = QtWidgets.QLabel()
@@ -145,6 +148,8 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         status_layout.addRow("Samples", self.samples_label)
         status_layout.addRow("Bytes", self.bytes_label)
         status_layout.addRow("Overwritten", self.overwritten_label)
+        status_layout.addRow("Queue depth", self.queue_label)
+        status_layout.addRow("Storage writes", self.storage_writes_label)
         status_layout.addRow("Missed", self.missed_label)
         status_layout.addRow("Latest CRC", self.crc_label)
         status_layout.addRow("Last error", self.error_label)
@@ -279,6 +284,8 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         self.samples_label.setText(str(status.samples_written))
         self.bytes_label.setText(str(status.bytes_written))
         self.overwritten_label.setText(str(status.records_overwritten))
+        self.queue_label.setText(str(status.storage_queue_depth))
+        self.storage_writes_label.setText(str(status.storage_writes))
         self.missed_label.setText(str(status.missed_bursts))
         self.crc_label.setText(f"0x{latest.crc32:08X}" if latest else "0x00000000")
         self.error_label.setText(status.last_error)

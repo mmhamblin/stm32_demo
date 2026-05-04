@@ -1,5 +1,17 @@
 #include "platform_stm32u5.h"
 
+/**
+ * @file platform_stm32u5_hal.c
+ * @brief STM32U5A5 HAL-shaped implementation of the platform boundary.
+ *
+ * This file shows where CubeMX-generated HAL handles and calls would live.
+ * Acquisition code calls Platform_StartAfeCapture() rather than directly
+ * depending on PSSI/DCMI/DMA details.
+ *
+ * @requirement SRS-ACQ-001
+ * @requirement SRS-HAL-001
+ */
+
 #include "acquisition.h"
 
 /*

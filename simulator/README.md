@@ -16,7 +16,7 @@ This runs a short burst-acquisition model:
 The GUI uses `device_memory.py` to model the STM32 RAM path:
 
 ```text
-burst acquisition -> RAM ring buffer -> GUI reads latest record
+burst acquisition -> storage queue -> RAM ring buffer -> GUI reads latest record
 ```
 
 The `advanced/` folder contains an optional larger simulator with command parsing and a fuller `.u12log` format. The simple demo is the recommended one-hour interview path.

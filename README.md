@@ -24,6 +24,8 @@ The project is a non-clinical engineering demo. It does not diagnose, treat, ima
 AFE5401-style sample source
   -> STM32U5A5 PSSI/DCMI + DMA concept
   -> ThreadX acquisition thread
+  -> ThreadX queue
+  -> ThreadX storage thread
   -> RAM ring buffer
   -> GUI monitor reads latest record/status
 ```
@@ -32,7 +34,7 @@ In this repository, the hardware is simulated:
 
 ```text
 simple Python burst generator
-  -> simulator/device_memory.py
+  -> simulator/device_memory.py acquisition/storage model
   -> gui/acquisition_demo_ui.py
 ```
 
@@ -105,6 +107,7 @@ The tests cover the burst generator, simple log record format, simulated memory 
 | `simulator/device_memory.py` | Simulated STM32 RAM record store. |
 | `tests/` | Standard-library unit tests for the simulator and memory model. |
 | `embedded/src/acquisition_thread.c` | ThreadX acquisition-loop shape. |
+| `embedded/src/storage_thread.c` | ThreadX storage-thread shape. |
 | `embedded/src/platform_stm32u5_hal.c` | STM32U5A5 HAL boundary. |
 | `embedded/src/memory_store.c` | C RAM ring buffer shape. |
 | `gui/acquisition_demo_ui.py` | Python/Qt monitor UI. |
@@ -116,7 +119,7 @@ The tests cover the burst generator, simple log record format, simulated memory 
 | ADC source | Synthetic 12-bit samples | TI AFE5401 data bus |
 | Capture | Python generator | PSSI or DCMI with DMA |
 | Memory | Python RAM ring buffer | C RAM ring buffer |
-| Scheduling | Qt/Python timer | ThreadX thread/timer |
+| Scheduling | Qt/Python timer | ThreadX acquisition and storage threads |
 | GUI link | In-process simulator | USB CDC/status interface |
 
 ## Next Hardware Steps

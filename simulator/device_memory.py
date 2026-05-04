@@ -1,8 +1,8 @@
-"""Simulated STM32U5A5 memory store.
+"""Simulated STM32U5A5 acquisition and memory store.
 
-The C firmware skeleton writes each completed acquisition burst to RAM through
-MemoryStore_WriteBurst(). This Python module mirrors that behavior so the GUI
-can read "device memory" instead of directly owning acquisition data.
+The C firmware skeleton separates acquisition timing from storage work. This
+Python module mirrors that idea with a small acquisition-to-storage queue so
+the GUI can read "device memory" instead of directly owning acquisition data.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from simple_acquisition_demo import SAMPLE_RATE_HZ, SAMPLES_PER_BURST, generate_
 
 
 MEMORY_RECORD_COUNT = 8
+STORAGE_QUEUE_DEPTH = 4
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,9 @@ class MemoryStatus:
     records_written: int
     records_overwritten: int
     latest_sequence: int
+    storage_queue_depth: int
+    storage_writes: int
+    storage_queue_full: int
     samples_written: int
     bytes_written: int
     missed_bursts: int
@@ -51,16 +55,19 @@ class DeviceMemory:
         self.samples_written = 0
         self.bytes_written = 0
 
-    def write_burst(self, samples: list[int]) -> MemoryRecord:
+    def write_burst(self, samples: list[int], timestamp_us: int | None = None) -> MemoryRecord:
         if len(samples) != SAMPLES_PER_BURST:
             raise ValueError("wrong_sample_count")
         if any(sample < 0 or sample > 4095 for sample in samples):
             raise ValueError("sample_out_of_12_bit_range")
 
         payload = struct.pack(f"<{len(samples)}H", *samples)
+        record_timestamp_us = (
+            timestamp_us if timestamp_us is not None else int(time.time() * 1_000_000)
+        )
         record = MemoryRecord(
             sequence=self.records_written,
-            timestamp_us=int(time.time() * 1_000_000),
+            timestamp_us=record_timestamp_us,
             sample_count=len(samples),
             sample_rate_hz=SAMPLE_RATE_HZ,
             crc32=zlib.crc32(payload) & 0xFFFF_FFFF,
@@ -94,17 +101,23 @@ class DeviceMemory:
 
 
 class SimulatedStm32U5A5:
-    """Tiny device model: acquisition writes to memory; GUI reads memory."""
+    """Tiny device model: acquisition queues bursts; storage writes memory."""
 
     def __init__(self) -> None:
         self.memory = DeviceMemory()
+        self.storage_queue: list[tuple[int, list[int]]] = []
         self.state = "IDLE"
+        self.storage_writes = 0
+        self.storage_queue_full = 0
         self.missed_bursts = 0
         self.last_error = "NONE"
 
     def start(self) -> None:
         self.memory.reset()
+        self.storage_queue.clear()
         self.state = "ARMED"
+        self.storage_writes = 0
+        self.storage_queue_full = 0
         self.missed_bursts = 0
         self.last_error = "NONE"
 
@@ -115,10 +128,25 @@ class SimulatedStm32U5A5:
         self.state = "CAPTURING"
         burst_index = self.memory.records_written
         samples = generate_burst(burst_index)
+        capture_timestamp_us = int(time.time() * 1_000_000)
 
-        self.state = "WRITING"
-        record = self.memory.write_burst(samples)
+        self.state = "QUEUING"
+        if len(self.storage_queue) >= STORAGE_QUEUE_DEPTH:
+            self.storage_queue_full += 1
+            self.last_error = "STORAGE_QUEUE_FULL"
+            raise RuntimeError("storage_queue_full")
+
+        self.storage_queue.append((capture_timestamp_us, samples))
+
+        self.state = "STORING"
+        record = self._storage_step()
         self.state = "ARMED"
+        return record
+
+    def _storage_step(self) -> MemoryRecord:
+        capture_timestamp_us, samples = self.storage_queue.pop(0)
+        record = self.memory.write_burst(samples, timestamp_us=capture_timestamp_us)
+        self.storage_writes += 1
         return record
 
     def inject_missed_burst(self) -> None:
@@ -134,6 +162,9 @@ class SimulatedStm32U5A5:
             records_written=self.memory.records_written,
             records_overwritten=self.memory.records_overwritten,
             latest_sequence=latest_sequence,
+            storage_queue_depth=len(self.storage_queue),
+            storage_writes=self.storage_writes,
+            storage_queue_full=self.storage_queue_full,
             samples_written=self.memory.samples_written,
             bytes_written=self.memory.bytes_written,
             missed_bursts=self.missed_bursts,
