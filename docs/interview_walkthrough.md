@@ -38,6 +38,12 @@ This proves:
 - RAM ring overwrite behavior
 - CRC metadata exists
 
+Optional unit-test command:
+
+```powershell
+python -m unittest discover -s tests
+```
+
 ## 4. Show The Embedded C Shape
 
 Open these files:

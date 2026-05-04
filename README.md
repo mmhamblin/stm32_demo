@@ -87,6 +87,14 @@ This checks the core behavior without needing Qt:
 - the 8-record ring buffer overwrites as expected
 - CRC metadata is present
 
+## Run Unit Tests
+
+```powershell
+python -m unittest discover -s tests
+```
+
+The tests cover the burst generator, simple log record format, simulated memory store, ring-buffer overwrite behavior, and simulated device status flow.
+
 ## Key Files
 
 | File | Purpose |
@@ -95,6 +103,7 @@ This checks the core behavior without needing Qt:
 | `docs/board_interface_map.md` | How the requirement maps to STM32U5A5 concepts. |
 | `simulator/simple_acquisition_demo.py` | Minimal terminal demo. |
 | `simulator/device_memory.py` | Simulated STM32 RAM record store. |
+| `tests/` | Standard-library unit tests for the simulator and memory model. |
 | `embedded/src/acquisition_thread.c` | ThreadX acquisition-loop shape. |
 | `embedded/src/platform_stm32u5_hal.c` | STM32U5A5 HAL boundary. |
 | `embedded/src/memory_store.c` | C RAM ring buffer shape. |
