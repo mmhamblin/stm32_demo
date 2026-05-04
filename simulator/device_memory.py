@@ -15,11 +15,13 @@ import zlib
 
 from circular_dma import CircularDmaSimulator, DMA_RING_SAMPLE_COUNT
 from sd_card import SimulatedSdCard
-from simple_acquisition_demo import SAMPLE_RATE_HZ, SAMPLES_PER_BURST
+from simple_acquisition_demo import SAMPLE_RATE_HZ, SAMPLES_PER_BURST, generate_burst
 
 
 MEMORY_RECORD_COUNT = 8
 STORAGE_QUEUE_DEPTH = 4
+CAPTURE_MODE_BURST = "BURST_DMA"
+CAPTURE_MODE_CONTINUOUS = "CIRCULAR_DMA_WINDOW"
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,7 @@ class SimulatedStm32U5A5:
         self.sd_card = SimulatedSdCard(Path(__file__).resolve().parent / "logs" / "sd_capture.u12bin")
         self.circular_dma = CircularDmaSimulator()
         self.storage_queue: list[tuple[int, list[int]]] = []
+        self.capture_mode = CAPTURE_MODE_BURST
         self.state = "IDLE"
         self.storage_writes = 0
         self.storage_queue_full = 0
@@ -141,10 +144,18 @@ class SimulatedStm32U5A5:
         self.sd_card.unmount()
         self.state = "IDLE"
 
+    def set_capture_mode(self, capture_mode: str) -> None:
+        if capture_mode not in {CAPTURE_MODE_BURST, CAPTURE_MODE_CONTINUOUS}:
+            raise ValueError("invalid_capture_mode")
+        self.capture_mode = capture_mode
+
     def capture_once(self) -> MemoryRecord:
         self.state = "CAPTURING"
-        self.circular_dma.advance_one_period()
-        samples = self.circular_dma.latest_window()
+        if self.capture_mode == CAPTURE_MODE_CONTINUOUS:
+            self.circular_dma.advance_one_period()
+            samples = self.circular_dma.latest_window()
+        else:
+            samples = generate_burst(self.memory.records_written)
         capture_timestamp_us = int(time.time() * 1_000_000)
 
         self.state = "QUEUING"
@@ -187,7 +198,7 @@ class SimulatedStm32U5A5:
             records_written=self.memory.records_written,
             records_overwritten=self.memory.records_overwritten,
             latest_sequence=latest_sequence,
-            capture_mode="CIRCULAR_DMA_WINDOW",
+            capture_mode=self.capture_mode,
             dma_ring_samples=DMA_RING_SAMPLE_COUNT,
             dma_write_index=self.circular_dma.write_index,
             dma_total_samples=self.circular_dma.total_samples_written,

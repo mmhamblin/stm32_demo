@@ -32,7 +32,7 @@ except ModuleNotFoundError as exc:
     print("Install UI dependencies with: pip install -r requirements.txt")
     raise SystemExit(1) from exc
 
-from device_memory import MemoryRecord, SimulatedStm32U5A5
+from device_memory import CAPTURE_MODE_BURST, CAPTURE_MODE_CONTINUOUS, MemoryRecord, SimulatedStm32U5A5
 from simple_acquisition_demo import (
     BURST_PERIOD_SEC,
     SAMPLE_RATE_HZ,
@@ -126,6 +126,10 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         button_row2.addWidget(self.clear_button)
         run_layout.addLayout(button_row2)
 
+        self.mode_button = QtWidgets.QPushButton("Mode: Continuous")
+        self.mode_button.clicked.connect(self._toggle_capture_mode)
+        run_layout.addWidget(self.mode_button)
+
         self.start_button.clicked.connect(self._start_continuous)
         self.stop_button.clicked.connect(self._stop)
         self.capture_once_button.clicked.connect(self._capture_once)
@@ -181,6 +185,28 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         self.timer.start()
         self._update_status()
         self._append_event("Start: continuous 30 ms burst acquisition.")
+
+    def _toggle_capture_mode(self) -> None:
+        was_running = self.timer.isActive()
+        if was_running:
+            self.timer.stop()
+
+        next_mode = (
+            CAPTURE_MODE_BURST
+            if self.device.capture_mode == CAPTURE_MODE_CONTINUOUS
+            else CAPTURE_MODE_CONTINUOUS
+        )
+        self.device.set_capture_mode(next_mode)
+        self.latest_sequence_seen = -1
+
+        if was_running:
+            self.device.start()
+            self.last_period_start = time.perf_counter()
+            self.timer.start()
+
+        self._update_mode_button()
+        self._update_status()
+        self._append_event(f"Capture mode changed: {next_mode}")
 
     def _stop(self) -> None:
         was_running = self.timer.isActive()
@@ -312,6 +338,13 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         self.missed_label.setText(str(status.missed_bursts))
         self.crc_label.setText(f"0x{latest.crc32:08X}" if latest else "0x00000000")
         self.error_label.setText(status.last_error)
+        self._update_mode_button()
+
+    def _update_mode_button(self) -> None:
+        if self.device.capture_mode == CAPTURE_MODE_CONTINUOUS:
+            self.mode_button.setText("Mode: Continuous")
+        else:
+            self.mode_button.setText("Mode: Burst")
 
     def _append_event(self, text: str) -> None:
         timestamp = time.strftime("%H:%M:%S")

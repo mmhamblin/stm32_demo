@@ -75,6 +75,7 @@ The GUI supports:
 
 - continuous Start/Stop
 - Capture Once
+- Burst/Continuous capture-mode toggle
 - latest burst plot
 - simulated memory status
 - CRC/status event log

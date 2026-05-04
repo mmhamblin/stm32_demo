@@ -11,7 +11,13 @@ SIMULATOR_DIR = PROJECT_ROOT / "simulator"
 if str(SIMULATOR_DIR) not in sys.path:
     sys.path.insert(0, str(SIMULATOR_DIR))
 
-from device_memory import MEMORY_RECORD_COUNT, DeviceMemory, SimulatedStm32U5A5
+from device_memory import (
+    CAPTURE_MODE_BURST,
+    CAPTURE_MODE_CONTINUOUS,
+    MEMORY_RECORD_COUNT,
+    DeviceMemory,
+    SimulatedStm32U5A5,
+)
 from circular_dma import CircularDmaSimulator, DMA_RING_SAMPLE_COUNT, PERIOD_SAMPLE_ADVANCE
 from simple_acquisition_demo import SAMPLE_RATE_HZ, SAMPLES_PER_BURST, generate_burst
 
@@ -68,6 +74,7 @@ class SimulatedDeviceTests(unittest.TestCase):
         device = SimulatedStm32U5A5()
 
         self.assertEqual(device.status().state, "IDLE")
+        device.set_capture_mode(CAPTURE_MODE_CONTINUOUS)
 
         device.start()
         self.assertEqual(device.status().state, "ARMED")
@@ -77,7 +84,7 @@ class SimulatedDeviceTests(unittest.TestCase):
         self.assertEqual(status.state, "ARMED")
         self.assertEqual(status.records_written, 1)
         self.assertEqual(status.latest_sequence, record.sequence)
-        self.assertEqual(status.capture_mode, "CIRCULAR_DMA_WINDOW")
+        self.assertEqual(status.capture_mode, CAPTURE_MODE_CONTINUOUS)
         self.assertEqual(status.dma_ring_samples, DMA_RING_SAMPLE_COUNT)
         self.assertEqual(status.dma_total_samples, PERIOD_SAMPLE_ADVANCE)
         self.assertEqual(status.storage_queue_depth, 0)
@@ -121,6 +128,19 @@ class SimulatedDeviceTests(unittest.TestCase):
         status = device.status()
         self.assertEqual(status.missed_bursts, 1)
         self.assertEqual(status.last_error, "MISSED_BURST")
+
+    def test_can_capture_in_burst_mode(self) -> None:
+        device = SimulatedStm32U5A5()
+        device.set_capture_mode(CAPTURE_MODE_BURST)
+        device.start()
+
+        record = device.capture_once()
+        status = device.status()
+
+        self.assertEqual(status.capture_mode, CAPTURE_MODE_BURST)
+        self.assertEqual(record.sample_count, SAMPLES_PER_BURST)
+        self.assertEqual(status.records_written, 1)
+        self.assertEqual(status.dma_total_samples, 0)
 
 
 class CircularDmaTests(unittest.TestCase):
