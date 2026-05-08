@@ -5,8 +5,8 @@
  * @brief RAM-backed storage worker for completed acquisition bursts.
  *
  * Acquisition queues a completed buffer descriptor. This thread copies the
- * samples into the memory record store, updates counters, and releases the
- * ping-pong buffer back to acquisition.
+ * samples into the memory record store, appends the simulated SD log, updates
+ * counters, and releases the ping-pong buffer back to acquisition.
  *
  * @requirement SRS-MEM-001
  * @requirement SRS-MEM-002
@@ -15,6 +15,7 @@
 
 #include "memory_store.h"
 #include "platform_stm32u5.h"
+#include "sd_log.h"
 
 static storage_status_t g_storage_status;
 
@@ -42,6 +43,7 @@ void StorageThread_Entry(ULONG thread_input)
     (void)thread_input;
 
     MemoryStore_Init();
+    (void)SdLog_Init();
 
     while (true)
     {
@@ -55,9 +57,21 @@ void StorageThread_Entry(ULONG thread_input)
             continue;
         }
 
-        if (MemoryStore_WriteBurstAt(request.samples,
-                                     request.sample_count,
-                                     request.capture_tick_ms))
+        bool memory_ok = MemoryStore_WriteBurstAt(request.samples,
+                                                  request.sample_count,
+                                                  request.capture_tick_ms);
+        bool sd_ok = false;
+
+        if (memory_ok)
+        {
+            memory_store_status_t memory_status = MemoryStore_GetStatus();
+            sd_ok = SdLog_WriteBurstAt(memory_status.latest_sequence,
+                                       request.capture_tick_ms,
+                                       request.samples,
+                                       request.sample_count);
+        }
+
+        if (memory_ok && sd_ok)
         {
             g_storage_status.records_written++;
             g_storage_status.last_write_tick_ms = Platform_GetTickMs();

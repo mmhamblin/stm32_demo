@@ -32,7 +32,7 @@ except ModuleNotFoundError as exc:
     print("Install UI dependencies with: pip install -r requirements.txt")
     raise SystemExit(1) from exc
 
-from device_memory import MemoryRecord, SimulatedStm32U5A5
+from device_memory import CAPTURE_MODE_BURST, CAPTURE_MODE_CONTINUOUS, MemoryRecord, SimulatedStm32U5A5
 from simple_acquisition_demo import (
     BURST_PERIOD_SEC,
     SAMPLE_RATE_HZ,
@@ -103,6 +103,8 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         config_layout.addRow("Burst period", QtWidgets.QLabel("30 ms"))
         config_layout.addRow("Burst duration", QtWidgets.QLabel(f"{burst_duration_us():.1f} us"))
         config_layout.addRow("Memory records", QtWidgets.QLabel("8-record RAM ring"))
+        config_layout.addRow("Capture mode", QtWidgets.QLabel("continuous circular DMA window"))
+        config_layout.addRow("SD log", QtWidgets.QLabel("simulator/logs/sd_capture.u12bin"))
         layout.addWidget(config_group)
 
         run_group = QtWidgets.QGroupBox("Run")
@@ -124,6 +126,10 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         button_row2.addWidget(self.clear_button)
         run_layout.addLayout(button_row2)
 
+        self.mode_button = QtWidgets.QPushButton("Mode: Continuous")
+        self.mode_button.clicked.connect(self._toggle_capture_mode)
+        run_layout.addWidget(self.mode_button)
+
         self.start_button.clicked.connect(self._start_continuous)
         self.stop_button.clicked.connect(self._stop)
         self.capture_once_button.clicked.connect(self._capture_once)
@@ -138,8 +144,15 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         self.samples_label = QtWidgets.QLabel()
         self.bytes_label = QtWidgets.QLabel()
         self.overwritten_label = QtWidgets.QLabel()
+        self.capture_mode_label = QtWidgets.QLabel()
+        self.dma_ring_label = QtWidgets.QLabel()
+        self.dma_write_index_label = QtWidgets.QLabel()
         self.queue_label = QtWidgets.QLabel()
         self.storage_writes_label = QtWidgets.QLabel()
+        self.sd_state_label = QtWidgets.QLabel()
+        self.sd_records_label = QtWidgets.QLabel()
+        self.sd_bytes_label = QtWidgets.QLabel()
+        self.sd_errors_label = QtWidgets.QLabel()
         self.missed_label = QtWidgets.QLabel()
         self.crc_label = QtWidgets.QLabel()
         self.error_label = QtWidgets.QLabel()
@@ -148,8 +161,15 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         status_layout.addRow("Samples", self.samples_label)
         status_layout.addRow("Bytes", self.bytes_label)
         status_layout.addRow("Overwritten", self.overwritten_label)
+        status_layout.addRow("Capture mode", self.capture_mode_label)
+        status_layout.addRow("DMA ring", self.dma_ring_label)
+        status_layout.addRow("DMA write index", self.dma_write_index_label)
         status_layout.addRow("Queue depth", self.queue_label)
         status_layout.addRow("Storage writes", self.storage_writes_label)
+        status_layout.addRow("SD state", self.sd_state_label)
+        status_layout.addRow("SD records", self.sd_records_label)
+        status_layout.addRow("SD bytes", self.sd_bytes_label)
+        status_layout.addRow("SD errors", self.sd_errors_label)
         status_layout.addRow("Missed", self.missed_label)
         status_layout.addRow("Latest CRC", self.crc_label)
         status_layout.addRow("Last error", self.error_label)
@@ -165,6 +185,28 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         self.timer.start()
         self._update_status()
         self._append_event("Start: continuous 30 ms burst acquisition.")
+
+    def _toggle_capture_mode(self) -> None:
+        was_running = self.timer.isActive()
+        if was_running:
+            self.timer.stop()
+
+        next_mode = (
+            CAPTURE_MODE_BURST
+            if self.device.capture_mode == CAPTURE_MODE_CONTINUOUS
+            else CAPTURE_MODE_CONTINUOUS
+        )
+        self.device.set_capture_mode(next_mode)
+        self.latest_sequence_seen = -1
+
+        if was_running:
+            self.device.start()
+            self.last_period_start = time.perf_counter()
+            self.timer.start()
+
+        self._update_mode_button()
+        self._update_status()
+        self._append_event(f"Capture mode changed: {next_mode}")
 
     def _stop(self) -> None:
         was_running = self.timer.isActive()
@@ -284,11 +326,25 @@ class AcquisitionMonitor(QtWidgets.QMainWindow):
         self.samples_label.setText(str(status.samples_written))
         self.bytes_label.setText(str(status.bytes_written))
         self.overwritten_label.setText(str(status.records_overwritten))
+        self.capture_mode_label.setText(status.capture_mode)
+        self.dma_ring_label.setText(str(status.dma_ring_samples))
+        self.dma_write_index_label.setText(str(status.dma_write_index))
         self.queue_label.setText(str(status.storage_queue_depth))
         self.storage_writes_label.setText(str(status.storage_writes))
+        self.sd_state_label.setText("MOUNTED" if status.sd_mounted else "UNMOUNTED")
+        self.sd_records_label.setText(str(status.sd_records_written))
+        self.sd_bytes_label.setText(str(status.sd_bytes_written))
+        self.sd_errors_label.setText(str(status.sd_write_errors))
         self.missed_label.setText(str(status.missed_bursts))
         self.crc_label.setText(f"0x{latest.crc32:08X}" if latest else "0x00000000")
         self.error_label.setText(status.last_error)
+        self._update_mode_button()
+
+    def _update_mode_button(self) -> None:
+        if self.device.capture_mode == CAPTURE_MODE_CONTINUOUS:
+            self.mode_button.setText("Mode: Continuous")
+        else:
+            self.mode_button.setText("Mode: Burst")
 
     def _append_event(self, text: str) -> None:
         timestamp = time.strftime("%H:%M:%S")

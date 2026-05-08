@@ -13,10 +13,19 @@ This runs a short burst-acquisition model:
 - one burst every 30 ms
 - binary log output in `simulator/logs/simple_capture.u12bin`
 
-The GUI uses `device_memory.py` to model the STM32 RAM path:
+The GUI uses `circular_dma.py` and `device_memory.py` to model a continuous
+AFE stream feeding a circular DMA ring:
 
 ```text
-burst acquisition -> storage queue -> RAM ring buffer -> GUI reads latest record
+continuous AFE stream -> circular DMA ring -> 2046-sample window
+  -> storage queue -> RAM ring buffer -> GUI reads latest record
+                   -> simulated SD log file
+```
+
+The simulated SD-card log is written to:
+
+```text
+simulator/logs/sd_capture.u12bin
 ```
 
 The `advanced/` folder contains an optional larger simulator with command parsing and a fuller `.u12log` format. The simple demo is the recommended one-hour interview path.

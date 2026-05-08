@@ -13,6 +13,7 @@ ThreadX acquisition thread
 ThreadX storage thread
   -> receive queued buffer
   -> write 2046 12-bit samples to RAM record store
+  -> append the same burst to simulated SD log
   -> release capture buffer
 ```
 
@@ -22,6 +23,8 @@ Important files:
 - `src/acquisition_thread.c`: timing-sensitive acquisition loop.
 - `include/storage_thread.h`: completed-buffer queue contract.
 - `src/storage_thread.c`: RAM-backed storage thread.
+- `include/sd_log.h`: SD logging boundary for storage-owned writes.
+- `src/sd_log.c`: SDMMC/FileX-shaped logging skeleton.
 - `include/platform_stm32u5.h`: HAL boundary.
 - `src/platform_stm32u5_hal.c`: STM32U5A5 HAL-shaped capture/sleep mapping.
 - `include/memory_store.h`: RAM record format.

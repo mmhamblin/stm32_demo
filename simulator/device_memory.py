@@ -8,15 +8,20 @@ the GUI can read "device memory" instead of directly owning acquisition data.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 import struct
 import time
 import zlib
 
+from circular_dma import CircularDmaSimulator, DMA_RING_SAMPLE_COUNT
+from sd_card import SimulatedSdCard
 from simple_acquisition_demo import SAMPLE_RATE_HZ, SAMPLES_PER_BURST, generate_burst
 
 
 MEMORY_RECORD_COUNT = 8
 STORAGE_QUEUE_DEPTH = 4
+CAPTURE_MODE_BURST = "BURST_DMA"
+CAPTURE_MODE_CONTINUOUS = "CIRCULAR_DMA_WINDOW"
 
 
 @dataclass(frozen=True)
@@ -35,9 +40,18 @@ class MemoryStatus:
     records_written: int
     records_overwritten: int
     latest_sequence: int
+    capture_mode: str
+    dma_ring_samples: int
+    dma_write_index: int
+    dma_total_samples: int
     storage_queue_depth: int
     storage_writes: int
     storage_queue_full: int
+    sd_mounted: bool
+    sd_records_written: int
+    sd_bytes_written: int
+    sd_write_errors: int
+    sd_file_path: Path
     samples_written: int
     bytes_written: int
     missed_bursts: int
@@ -105,7 +119,10 @@ class SimulatedStm32U5A5:
 
     def __init__(self) -> None:
         self.memory = DeviceMemory()
+        self.sd_card = SimulatedSdCard(Path(__file__).resolve().parent / "logs" / "sd_capture.u12bin")
+        self.circular_dma = CircularDmaSimulator()
         self.storage_queue: list[tuple[int, list[int]]] = []
+        self.capture_mode = CAPTURE_MODE_BURST
         self.state = "IDLE"
         self.storage_writes = 0
         self.storage_queue_full = 0
@@ -114,6 +131,8 @@ class SimulatedStm32U5A5:
 
     def start(self) -> None:
         self.memory.reset()
+        self.sd_card.mount(reset_file=True)
+        self.circular_dma.reset()
         self.storage_queue.clear()
         self.state = "ARMED"
         self.storage_writes = 0
@@ -122,12 +141,21 @@ class SimulatedStm32U5A5:
         self.last_error = "NONE"
 
     def stop(self) -> None:
+        self.sd_card.unmount()
         self.state = "IDLE"
+
+    def set_capture_mode(self, capture_mode: str) -> None:
+        if capture_mode not in {CAPTURE_MODE_BURST, CAPTURE_MODE_CONTINUOUS}:
+            raise ValueError("invalid_capture_mode")
+        self.capture_mode = capture_mode
 
     def capture_once(self) -> MemoryRecord:
         self.state = "CAPTURING"
-        burst_index = self.memory.records_written
-        samples = generate_burst(burst_index)
+        if self.capture_mode == CAPTURE_MODE_CONTINUOUS:
+            self.circular_dma.advance_one_period()
+            samples = self.circular_dma.latest_window()
+        else:
+            samples = generate_burst(self.memory.records_written)
         capture_timestamp_us = int(time.time() * 1_000_000)
 
         self.state = "QUEUING"
@@ -146,6 +174,13 @@ class SimulatedStm32U5A5:
     def _storage_step(self) -> MemoryRecord:
         capture_timestamp_us, samples = self.storage_queue.pop(0)
         record = self.memory.write_burst(samples, timestamp_us=capture_timestamp_us)
+        if not self.sd_card.write_record(
+            sequence=record.sequence,
+            timestamp_us=record.timestamp_us,
+            sample_count=record.sample_count,
+            samples=record.samples,
+        ):
+            self.last_error = self.sd_card.status().last_error
         self.storage_writes += 1
         return record
 
@@ -156,15 +191,25 @@ class SimulatedStm32U5A5:
     def status(self) -> MemoryStatus:
         latest = self.memory.latest()
         latest_sequence = latest.sequence if latest else 0
+        sd_status = self.sd_card.status()
 
         return MemoryStatus(
             state=self.state,
             records_written=self.memory.records_written,
             records_overwritten=self.memory.records_overwritten,
             latest_sequence=latest_sequence,
+            capture_mode=self.capture_mode,
+            dma_ring_samples=DMA_RING_SAMPLE_COUNT,
+            dma_write_index=self.circular_dma.write_index,
+            dma_total_samples=self.circular_dma.total_samples_written,
             storage_queue_depth=len(self.storage_queue),
             storage_writes=self.storage_writes,
             storage_queue_full=self.storage_queue_full,
+            sd_mounted=sd_status.mounted,
+            sd_records_written=sd_status.records_written,
+            sd_bytes_written=sd_status.bytes_written,
+            sd_write_errors=sd_status.write_errors,
+            sd_file_path=sd_status.file_path,
             samples_written=self.memory.samples_written,
             bytes_written=self.memory.bytes_written,
             missed_bursts=self.missed_bursts,
